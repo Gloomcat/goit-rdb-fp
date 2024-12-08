@@ -1,0 +1,64 @@
+CREATE SCHEMA pandemic;
+
+USE pandemic;
+
+CREATE TABLE Entities (
+    EntityID INT PRIMARY KEY AUTO_INCREMENT,
+    EntityName VARCHAR(255) NOT NULL,
+    EntityCode VARCHAR(10) NOT NULL
+);
+
+INSERT INTO Entities (EntityName, EntityCode) SELECT DISTINCT Entity, Code FROM infectious_cases;
+
+CREATE TABLE infectious_cases_normalized SELECT * FROM infectious_cases;
+
+ALTER TABLE infectious_cases_normalized ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;
+
+ALTER TABLE infectious_cases_normalized ADD COLUMN EntityID INT;
+
+UPDATE infectious_cases_normalized AS icn
+JOIN Entities AS e ON icn.Code = e.EntityCode
+SET icn.EntityID = e.EntityID
+WHERE icn.id > 0;
+
+ALTER TABLE infectious_cases_normalized DROP COLUMN Entity;
+ALTER TABLE infectious_cases_normalized DROP COLUMN Code;
+
+SELECT * from infectious_cases_normalized;
+
+SELECT EntityID,
+AVG(Number_rabies) as average_rabies_cases,
+MIN(Number_rabies) as min_rabies_cases,
+MAX(Number_rabies) as max_rabies_cases,
+SUM(Number_rabies) as sum_rabies_cases
+FROM infectious_cases_normalized
+WHERE Number_rabies != ''
+GROUP BY EntityID
+ORDER BY average_rabies_cases DESC
+LIMIT 10;
+
+SELECT year_start, 
+       year_now, 
+       TIMESTAMPDIFF(YEAR, year_start, year_now) AS year_difference_from_now
+FROM (
+    SELECT 
+        DATE(CONCAT(Year, '-01-01')) AS year_start,
+        CURDATE() AS year_now
+    FROM infectious_cases_normalized
+) AS years
+
+DROP FUNCTION IF EXISTS CalculateYearDifference;
+
+DELIMITER //
+CREATE FUNCTION CalculateYearDifference(year_value INT)
+RETURNS INT
+DETERMINISTIC 
+NO SQL
+BEGIN
+    DECLARE result INT;
+    SET result = TIMESTAMPDIFF(YEAR, DATE(CONCAT(year_value, '-01-01')), CURDATE());
+    RETURN result;
+END //
+DELIMITER ;
+
+SELECT CalculateYearDifference(1975);
